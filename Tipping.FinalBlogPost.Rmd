@@ -1,0 +1,249 @@
+---
+---
+---
+
+# The Rise (and Fall) of the Most Tenured NBA Players {.underline}
+
+by: Gemma Tipping \| Sports Analytics Spring 2024
+
+*Introduction & Data Collection*
+
+There have been a myriad of "household name" NBA players that we have seen take the court for years on end. Some have illustrious careers and retire as late as possible while others plateau and almost become a good laugh for the NBA fanbase. It all seems random, but I find it hard to believe that this is any sort of coincidence. Therefore, this blog begs the question; what separates the most successful and the most plateaued players in the league, and what causes them to fizzle out or thrive? I hope that my analysis can shed some light onto this question.
+
+In order to answer this question, I have web-scraped data from basketball-reference.com. More specifically, I took each player's career statistics table, scraped it, and combined all of the player's tables and statistics into one. I picked ten players from varying decades who played over ten years in the NBA and left (or are currently in) the league with differing success. The following analysis was conducted through stats of the following players: LeBron James, Kobe Bryant, Michael Jordan, Kareem Abdul-Jabbar, Chris Paul, Shaquille O'Neal, Larry Bird, Russell Westbrook, James Harden, and Steph Curry.
+
+Look below do see how I set up the data and collected it:
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(rvest)
+library(ggplot2)
+library(ggthemes)
+library(readr)
+
+get_player_data <- function(url, player_name) {
+  data <- read_html(url) %>%
+    html_elements("table") %>%
+    html_table() %>%
+    .[[2]]
+  
+  data <- data %>%
+    mutate(Player = player_name)
+  
+  return(data)
+}
+
+player_urls <- list(
+  LeBron_James = "https://www.basketball-reference.com/players/j/jamesle01.html",
+  Kobe_Bryant = "https://www.basketball-reference.com/players/b/bryanko01.html",
+  Michael_Jordan = "https://www.basketball-reference.com/players/j/jordami01.html",
+  Kareem_AbdulJabbar = "https://www.basketball-reference.com/players/a/abdulka01.html",
+  Chris_Paul = "https://www.basketball-reference.com/players/p/paulch01.html",
+  Shaquille_ONeal = "https://www.basketball-reference.com/players/o/onealsh01.html",
+  Larry_Bird = "https://www.basketball-reference.com/players/b/birdla01.html",
+  Russell_Westbrook = "https://www.basketball-reference.com/players/w/westbru01.html",
+  James_Harden = "https://www.basketball-reference.com/players/h/hardeja01.html", 
+  Steph_Curry = "https://www.basketball-reference.com/players/c/curryst01.html"
+)
+
+all_player_data <- lapply(names(player_urls), function(player_name) {
+  get_player_data(player_urls[[player_name]], player_name)
+})
+
+player_performance_table <- bind_rows(all_player_data)
+
+player_performance_table <- player_performance_table %>%
+  select(-Awards)
+
+player_performance_table <- player_performance_table %>%
+  select(Player, everything())
+
+rows_to_omit <- c(22, 23, 24, 25, 26, 42, 56, 57, 58, 77, 78, 79, 80, 100, 101, 102, 103, 104, 105, 106, 107, 125, 126, 127, 128, 129, 130, 131, 132, 145, 164, 165, 166, 167, 168, 169, 170, 190, 191, 192, 193, 194, 195, 196)
+
+player_performance_table <- player_performance_table[-rows_to_omit, ]
+```
+
+*Player Performance Comparison*
+
+First, let's look at the overall success of each of the players selected for this analysis. For non NBA fans, it will be important to know the overall success of these players.
+
+```{r}
+player_average_pts <- player_performance_table %>%
+  group_by(Player) %>%
+  summarize(avg_pts_player = mean(PTS, na.rm=T))
+
+player_average_pts %>%
+  ggplot() + 
+  geom_col(aes(x = Player, y = avg_pts_player, fill = Player)) + 
+  theme_minimal() +
+  labs(
+    title = "Average Points Per Player",
+    x = "Player",
+    y = "Average Points"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Veterans like LeBron James and Michael Jordan are some of the best of their time and excelled. That said, Russell Westbrook and Chris Pauls were also stars in their prime who have fizzled out. Why do players like LeBron carry teams well into their 40's, averaging well over 20 points whereas players like Chris Paul can't even break the 20's? I have to believe there is a specific reason.
+
+```{r}
+player_average_fg <- player_performance_table %>%
+  mutate(`FG%` = as.character(`FG%`)) %>%
+  mutate(`FG%` = parse_number(`FG%`)) %>%
+  group_by(Player) %>%
+  summarize(avg_fg_player = mean(`FG%`, na.rm = TRUE))
+
+player_average_fg %>%
+  ggplot() + 
+  geom_col(aes(x = Player, y = avg_fg_player, fill = Player)) + 
+  theme_minimal() +
+  labs(
+    title = "Average FG% Per Player",
+    x = "Player",
+    y = "Average FG%"
+  ) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+I wanted to make sure to understand how efficient each player also was to see if their average points was an anomaly. However, Russell Westbrook is still at the bottom of the pack and Chris Paul is not far behind. Many of the centers and forwards are averaging 40-50% in FG% because of their position, but some others are consistently at the bottom. I want to figure out not just when, but they they hit their plateau. Therefore, I wanted to know exactly how long each player has or did play in the league.
+
+```{r}
+seasons_played <- player_performance_table %>%
+  group_by(Player) %>%
+  summarize(SeasonsPlayed = n())
+
+seasons_played <- seasons_played %>%
+  arrange(desc(SeasonsPlayed))
+
+ggplot(seasons_played, aes(x = reorder(Player, SeasonsPlayed), y = SeasonsPlayed)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  theme_minimal() +
+  labs(title = "Number of Seasons Played by Player",
+       x = "Player",
+       y = "Number of Seasons Played") +
+  coord_flip()
+```
+
+Looking at this visualization, it is very clear that more recent players, or players that are still in the league have had longer seasons than successful players from previous decades. Michael Jordan who had the highest average number of points played barely over a decade in the league, whereas less successful players such as Russell Westbrook and Chris Paul are coming close to two decades in the league, with LeBron surpassing this accomplishment. It is safe to conclude that players are staying in the league for longer, but does this affect their overall success in their careers?
+
+*Does More Time in the NBA Mean Less Success?*
+
+To answer the question mentioned above, I created a regression model that compares a players number of seasons to their overall average points. I wanted to figure out if the average points per player is dependent upon or affected by the length of their career.
+
+```{r}
+seasons_played <- player_performance_table %>%
+  group_by(Player) %>%
+  summarize(SeasonsPlayed = n()) %>%
+  arrange(desc(SeasonsPlayed))
+
+player_summary <- merge(player_average_pts, seasons_played, by = "Player")
+
+regression_model <- lm(avg_pts_player ~ SeasonsPlayed, data = player_summary)
+summary(regression_model)
+```
+
+```{r}
+regression_summary <- summary(regression_model)
+
+ggplot(player_summary, aes(x = SeasonsPlayed, y = avg_pts_player)) +
+  geom_point(aes(color = Player)) + 
+  geom_smooth(method = "lm", se = FALSE, aes(group = 1)) + 
+  geom_text(aes(label = Player), nudge_y = 0.5, check_overlap = TRUE, size = 3) + 
+  labs(title = "Average Points per Player vs Seasons Played",
+       x = "Seasons Played",
+       y = "Average Points per Game") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Based on the R\^2 of 0.0983 (or 9.83%), we cannot conclude confidently that there is a statistically significant relationship between the numbers of season played and the number of points that a player averages. Our adjusted R\^2 of -0.01 also tells us that this model does not necessarily fit the data well, meaning the visualization above is slightly misleading and not representative of an actual downward trend in points based on the number of seasons a player competes. Therefore, I wanted to see if there were any other factors that contributed to whether or not players with longer careers could be successful.
+
+*Should Players Stick With The Same Team?*
+
+We know that switching teams can affect a player's psyche on a good day. I had an original prediction that players who switched to multiple teams could have their statistics negatively affected. Therefore, I wanted to see which players switched teams and how often they switched.
+
+```{r}
+teams_played_for <- player_performance_table %>%
+  select(Player, Tm) %>%
+  group_by(Player, Tm) %>%
+  summarise(num_yrs_for_team = n(), .groups = "drop") %>%
+  ungroup()
+
+teams_played_for %>%
+  ggplot() + 
+  geom_col(aes(x = Player, y = num_yrs_for_team, fill = Tm)) + 
+  theme_minimal() +
+  labs(
+    title = "Team Tenure by Player",
+    x = "Player",
+    y = "Number of Seasons on Team"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+teams_played_for <- player_performance_table %>%
+  select(Player, Tm) %>%
+  distinct() %>%
+  group_by(Player) %>%
+  summarize(TeamsPlayedFor = n(), .groups = "drop")
+
+ggplot(teams_played_for, aes(x = reorder(Player, -TeamsPlayedFor), y = TeamsPlayedFor, fill = Player)) + 
+  geom_col() + 
+  theme_minimal() +
+  labs(
+    title = "Number of Teams Played For by Player",
+    x = "Player",
+    y = "Number of Teams"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+There are some anomalies on this table such as LeBron James who has been successful on multiple teams, whereas Chris Paul, James Harden, and Russell Westbrook have been on multiple teams and some of them have struggled in recent years. While there are not any major discrepancies between the number of teams played for and success, I wanted to run a regression model to see is there was any relationship.
+
+```{r}
+player_data <- teams_played_for %>%
+  inner_join(player_average_pts, by = "Player")
+
+regression_model <- lm(avg_pts_player ~ TeamsPlayedFor, data = player_data)
+summary(regression_model)
+```
+
+```{r}
+ggplot(player_data, aes(x = TeamsPlayedFor, y = avg_pts_player)) +
+  geom_point(aes(color = Player)) + 
+   geom_text(aes(label = Player), nudge_y = 0.5, check_overlap = TRUE, size = 3) + 
+  geom_smooth(method = "lm", se = FALSE, aes(group = 1)) +
+  labs(
+    title = "Average Pts vs Number of Teams Played For",
+    x = "Number of Teams Played For",
+    y = "Average FG%"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+To my surprise, there was a statistically significant relationship, and in fact a negative one, between the number of teams a player has competed on and their average number of points. This model explains about 40.82% of the variance in average points scored by players, and based on the Adjusted R\^2 and F-stat, this model seems to be a pretty good fit for the data. This concludes that for each additional team beyong one that a player competes for, their points average goes down by about 1.14 points, making this statistically significant. I would predict that this could be caused by a myriad of things, including but not limited to a lack of stability, team dynamics, and more.
+
+However, to truly confirm if the number of teams played for affects a players success in the NBA, I wanted to also run a regression model on a negative statistic, specifically turnovers
+
+```{r}
+player_average_tov <- player_performance_table %>%
+  group_by(Player) %>%
+  summarize(avg_tov_player = mean(TOV, na.rm=T))
+
+player_data <- teams_played_for %>%
+  inner_join(player_average_tov, by = "Player")
+
+regression_model <- lm(avg_tov_player ~ TeamsPlayedFor, data = player_data)
+summary(regression_model)
+```
+
+I did not consider completing a visualization for this data, as there is not a statistically significant relationship between the number of teams played for and the average turnovers per player. Only 0.03% of the variance in turnovers can be explained by the number of teams played for and the model is not a good fit for the data. Therefore, the number of teams an athlete plays for does not necessarily cause them to fail, but it does hurt their success concerning high statistics.
+
+*Conclusion*
+
+Ultimately, there is no correlation between the number of years a player competes and their success in scoring. However, there is significant evidence that shows the team of times a player switches teams can affect their success. This seems to make sense, as phenomenons like LeBron may become more and more common as the human race becomes more athletic and our bodies can endure more. However, there is something to be said about what the toll of switching teams and having inconsistent dynamics can do to an athlete.
+
+A piece of advice to any basketball players out there. LeBron James is an anomaly. There is a reason that players like Jokic, Giannis, Steph, and Jordan are so great it seems. They all mostly have and did stay with the same teams and developed themselves within one program. Remember that the next time you are about to quit a team or bet on a rookie who is switching teams year by year.
